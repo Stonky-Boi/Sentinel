@@ -3,6 +3,7 @@ from confluent_kafka import Consumer, Producer, KafkaException, KafkaError
 from schemas.log_events import NetworkLog
 from core.qdrant_client import get_qdrant_client, setup_collection, store_log_in_qdrant
 from agents.triage_agent import analyze_log_for_anomalies
+from agents.retrieval_agent import retrieve_similar_logs
 
 # Initialize the client and ensure the collection exists before the consumer loop starts
 qdrant = get_qdrant_client()
@@ -14,7 +15,9 @@ def get_kafka_consumer(group_id: str) -> Consumer:
     config = {
         "bootstrap.servers": "localhost:9092",
         "group.id": group_id,
-        "auto.offset.reset": "earliest"
+        "auto.offset.reset": "earliest",
+        "session.timeout.ms": 60000,
+        "max.poll.interval.ms": 300000
     }
     return Consumer(config)
 
@@ -63,7 +66,21 @@ def consume_raw_logs(topic: str, group_id: str) -> None:
                 if triage_result.is_anomalous:
                     print(f"    [ALERT] Anomaly Detected! Confidence: {triage_result.confidence_score}")
                     print(f"    Reason: {triage_result.reason}")
-                    # Future step: Forward to the logs_anomalies Kafka topic for the Retrieval Agent
+
+                    print("    RAG] Searching memory for similar past events...")
+                    historical_context = retrieve_similar_logs(
+                        client=qdrant,
+                        collection_name=collection,
+                        anomalous_log=validated_log,
+                        limit=2
+                    )
+
+                    if historical_context:
+                        print(f"    [MEMORY] Found {len(historical_context)} similar past event(s).")
+                        for past_event in historical_context:
+                            print(f"        -> [{past_event['score']:.2f}] {past_event['event_type']} from {past_event['source_ip']}")
+                    else:
+                        print("    [MEMORY] No similar past events found. This is a novel anomaly.") 
                 else:
                     print(f"    [NORMAL] Log cleared. Reason: {triage_result.reason}")
                 
