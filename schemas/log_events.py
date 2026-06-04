@@ -14,3 +14,9 @@ class TriageDecision(BaseModel):
     is_anomalous: bool
     confidence_score: float
     reason: str
+
+class IncidentReport(BaseModel):
+    incident_title: str
+    severity_level: str
+    executive_summary: str
+    recommended_actions: list[str]

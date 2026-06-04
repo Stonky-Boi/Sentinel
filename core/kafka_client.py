@@ -4,6 +4,7 @@ from schemas.log_events import NetworkLog
 from core.qdrant_client import get_qdrant_client, setup_collection, store_log_in_qdrant
 from agents.triage_agent import analyze_log_for_anomalies
 from agents.retrieval_agent import retrieve_similar_logs
+from agents.reasoning_agent import generate_incident_report
 
 # Initialize the client and ensure the collection exists before the consumer loop starts
 qdrant = get_qdrant_client()
@@ -16,8 +17,8 @@ def get_kafka_consumer(group_id: str) -> Consumer:
         "bootstrap.servers": "localhost:9092",
         "group.id": group_id,
         "auto.offset.reset": "earliest",
-        "session.timeout.ms": 60000,
-        "max.poll.interval.ms": 300000
+        "session.timeout.ms": 100000,
+        "max.poll.interval.ms": 500000
     }
     return Consumer(config)
 
@@ -67,7 +68,7 @@ def consume_raw_logs(topic: str, group_id: str) -> None:
                     print(f"    [ALERT] Anomaly Detected! Confidence: {triage_result.confidence_score}")
                     print(f"    Reason: {triage_result.reason}")
 
-                    print("    RAG] Searching memory for similar past events...")
+                    print("    [RAG] Searching memory for similar past events...")
                     historical_context = retrieve_similar_logs(
                         client=qdrant,
                         collection_name=collection,
@@ -81,6 +82,17 @@ def consume_raw_logs(topic: str, group_id: str) -> None:
                             print(f"        -> [{past_event['score']:.2f}] {past_event['event_type']} from {past_event['source_ip']}")
                     else:
                         print("    [MEMORY] No similar past events found. This is a novel anomaly.") 
+
+                    print("    [REASONING] Drafting incident report...")
+                    report = generate_incident_report(
+                        log=validated_log,
+                        triage=triage_result,
+                        history=historical_context
+                    )
+                    print(f"\n    INCIDENT REPORT: {report.incident_title}")
+                    print(f"    Severity: {report.severity_level}")
+                    print(f"    Summary: {report.executive_summary}")
+                    print(f"    Actions: {', '.join(report.recommended_actions)}\n")
                 else:
                     print(f"    [NORMAL] Log cleared. Reason: {triage_result.reason}")
                 
