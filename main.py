@@ -1,27 +1,26 @@
 import json
+import time
 from core.kafka_client import get_kafka_producer, consume_raw_logs
+from data.test_logs import NETWORK_LOGS
 
-def push_test_log(topic: str) -> None:
-    """Pushes a synthetic syslog event to Kafka to test the pipeline."""
+def push_test_logs(topic: str) -> None:
+    """Pushes a predefined list of synthetic syslog events to Kafka."""
     producer = get_kafka_producer()
-    
-    test_log = {
-        "timestamp": "2026-06-04T18:36:07Z",
-        "source_ip": "192.168.1.50",
-        "destination_ip": "10.0.0.5",
-        "event_type": "Failed Login Attempt",
-        "severity": "HIGH",
-        "raw_message": "sshd[1432]: Failed password for root from 192.168.1.50 port 54321 ssh2"
-    }
-    
-    encoded_log = json.dumps(test_log).encode("utf-8")
-    producer.produce(topic, value=encoded_log)
+    print(f"Pushing {len(NETWORK_LOGS)} test logs to topic '{topic}'...\n")
+    for log in NETWORK_LOGS:
+        try:
+            encoded_log = json.dumps(log).encode("utf-8")
+            producer.produce(topic, value=encoded_log)
+            print(f"Produced log: {log['event_type']} from {log['source_ip']}")
+            # Simulate network delay between incoming logs
+            time.sleep(0.5)
+        except Exception as production_error:
+            print(f"[ERROR] Failed to produce log. Error: {production_error}")
     producer.flush()
-    print("Test log successfully published to Kafka.")
+    print("\nAll test logs successfully published to Kafka. Starting Consumer...\n")
+    print("-" * 60)
 
 if __name__ == "__main__":
     target_topic = "logs_raw"
-    
-    push_test_log(topic=target_topic)
-    
+    push_test_logs(topic=target_topic)
     consume_raw_logs(topic=target_topic, group_id="sentinel_triage_group")

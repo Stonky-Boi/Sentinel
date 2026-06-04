@@ -2,6 +2,7 @@ import json
 from confluent_kafka import Consumer, Producer, KafkaException, KafkaError
 from schemas.log_events import NetworkLog
 from core.qdrant_client import get_qdrant_client, setup_collection, store_log_in_qdrant
+from agents.triage_agent import analyze_log_for_anomalies
 
 # Initialize the client and ensure the collection exists before the consumer loop starts
 qdrant = get_qdrant_client()
@@ -54,10 +55,17 @@ def consume_raw_logs(topic: str, group_id: str) -> None:
             try:
                 parsed_dict = json.loads(raw_data)
                 validated_log = NetworkLog(**parsed_dict)
-                print(f"[VALID] Parsed log from {validated_log.source_ip}: {validated_log.event_type}")
+                print(f"\n[VALID] Parsed log from {validated_log.source_ip}: {validated_log.event_type}")
                 store_log_in_qdrant(client=qdrant, collection_name=collection, log=validated_log)
                 
-                # Future step: Pass validated_log to the Vector DB or Triage Agent here
+                print("[TRIAGE] Analyzing log for anomalies...")
+                triage_result = analyze_log_for_anomalies(log=validated_log)
+                if triage_result.is_anomalous:
+                    print(f"    [ALERT] Anomaly Detected! Confidence: {triage_result.confidence_score}")
+                    print(f"    Reason: {triage_result.reason}")
+                    # Future step: Forward to the logs_anomalies Kafka topic for the Retrieval Agent
+                else:
+                    print(f"    [NORMAL] Log cleared. Reason: {triage_result.reason}")
                 
             except json.JSONDecodeError as decode_error:
                 print(f"[ERROR] Failed to decode JSON string. Error: {decode_error}")

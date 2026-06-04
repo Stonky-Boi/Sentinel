@@ -3,7 +3,7 @@ import ollama
 from pydantic import ValidationError
 from schemas.log_events import NetworkLog, TriageDecision
 
-def analyze_log_for_anomalies(log: NetworkLog, model_name: str = "qwen2.5") -> TriageDecision:
+def analyze_log_for_anomalies(log: NetworkLog, model_name: str = "qwen2.5-coder") -> TriageDecision:
     """
     Evaluates a network log using a local LLM to determine if it is anomalous.
     Forces the LLM to return a structured JSON response.
