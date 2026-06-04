@@ -2,6 +2,9 @@ from typing import List, Dict, Any
 from qdrant_client import QdrantClient
 from schemas.log_events import NetworkLog
 from core.qdrant_client import embed_log
+from core.logger import get_logger
+
+logger = get_logger("retrieval_agent")
 
 def retrieve_similar_logs(
     client: QdrantClient, 
@@ -35,5 +38,5 @@ def retrieve_similar_logs(
         return similar_logs
     
     except Exception as retrieval_error:
-        print(f"[ERROR] Retrieval Agent failed to query Qdrant. Error: {retrieval_error}")
+        logger.error(f"Failed to query Qdrant. Error: {retrieval_error}")
         return []

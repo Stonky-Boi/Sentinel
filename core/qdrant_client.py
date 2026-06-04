@@ -3,6 +3,9 @@ import ollama
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct
 from schemas.log_events import NetworkLog
+from core.logger import get_logger
+
+logger = get_logger("qdrant_client")
 
 def get_qdrant_client() -> QdrantClient:
     """Initializes and returns a connection to the local Qdrant instance."""
@@ -15,9 +18,9 @@ def setup_collection(client: QdrantClient, collection_name: str, vector_size: in
             collection_name=collection_name,
             vectors_config=VectorParams(size=vector_size, distance=Distance.COSINE),
         )
-        print(f"Collection '{collection_name}' created successfully in local storage.")
+        logger.info(f"Collection '{collection_name}' created successfully.")
     else:
-        print(f"Collection '{collection_name}' already exists.")
+        logger.info(f"Collection '{collection_name}' already exists.")
 
 def embed_log(log: NetworkLog) -> list[float]:
     """Generates a vector embedding for a network log using Ollama."""
@@ -52,7 +55,7 @@ def store_log_in_qdrant(client: QdrantClient, collection_name: str, log: Network
             collection_name=collection_name,
             points=[point]
         )
-        print(f"[STORED] Log embedded and saved to local Qdrant with ID: {point_id}")
+        logger.info(f"Log embedded and saved to Qdrant with ID: {point_id}")
         
     except Exception as storage_error:
-        print(f"[ERROR] Failed to embed or store log in Qdrant. Error: {storage_error}")
+        logger.error(f"Failed to embed or store log in Qdrant. Error: {storage_error}")

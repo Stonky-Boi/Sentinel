@@ -2,6 +2,9 @@ import json
 import ollama
 from pydantic import ValidationError
 from schemas.log_events import NetworkLog, TriageDecision
+from core.logger import get_logger
+
+logger = get_logger("triage_agent")
 
 def analyze_log_for_anomalies(log: NetworkLog, model_name: str = "qwen2.5-coder") -> TriageDecision:
     """
@@ -39,7 +42,7 @@ def analyze_log_for_anomalies(log: NetworkLog, model_name: str = "qwen2.5-coder"
         return TriageDecision(**decision_dict)
         
     except (json.JSONDecodeError, ValidationError) as parsing_error:
-        print(f"[WARNING] Triage Agent failed to parse LLM response. Error: {parsing_error}")
+        logger.warning(f"Failed to parse LLM response. Error: {parsing_error}")
         # Fail open: if the LLM hallucinates the JSON format, we assume it's normal to prevent alert fatigue
         return TriageDecision(
             is_anomalous=False, 
@@ -47,5 +50,5 @@ def analyze_log_for_anomalies(log: NetworkLog, model_name: str = "qwen2.5-coder"
             reason="Failed to parse LLM triage response."
         )
     except Exception as general_error:
-        print(f"[ERROR] Triage Agent execution failed. Error: {general_error}")
+        logger.error(f"Execution failed. Error: {general_error}")
         raise

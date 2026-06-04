@@ -5,8 +5,9 @@ from core.qdrant_client import get_qdrant_client, setup_collection, store_log_in
 from agents.triage_agent import analyze_log_for_anomalies
 from agents.retrieval_agent import retrieve_similar_logs
 from agents.reasoning_agent import generate_incident_report
+from core.logger import get_logger
 
-# Initialize the client and ensure the collection exists before the consumer loop starts
+logger = get_logger("kafka_client")
 qdrant = get_qdrant_client()
 collection = "network_logs"
 setup_collection(client=qdrant, collection_name=collection)
@@ -34,7 +35,7 @@ def consume_raw_logs(topic: str, group_id: str) -> None:
     consumer = get_kafka_consumer(group_id=group_id)
     consumer.subscribe([topic])
 
-    print(f"Starting consumer for topic: {topic}. Waiting for logs...")
+    logger.info(f"Starting consumer for topic: {topic}. Waiting for logs...")
 
     try:
         while True:
@@ -59,16 +60,16 @@ def consume_raw_logs(topic: str, group_id: str) -> None:
             try:
                 parsed_dict = json.loads(raw_data)
                 validated_log = NetworkLog(**parsed_dict)
-                print(f"\n[VALID] Parsed log from {validated_log.source_ip}: {validated_log.event_type}")
+                logger.info(f"Parsed valid log from {validated_log.source_ip}: {validated_log.event_type}")
                 store_log_in_qdrant(client=qdrant, collection_name=collection, log=validated_log)
                 
-                print("[TRIAGE] Analyzing log for anomalies...")
+                logger.info("Analyzing log for anomalies...")
                 triage_result = analyze_log_for_anomalies(log=validated_log)
                 if triage_result.is_anomalous:
-                    print(f"    [ALERT] Anomaly Detected! Confidence: {triage_result.confidence_score}")
-                    print(f"    Reason: {triage_result.reason}")
+                    logger.warning(f"Anomaly Detected! Confidence: {triage_result.confidence_score}")
+                    logger.warning(f"Reason: {triage_result.reason}")
 
-                    print("    [RAG] Searching memory for similar past events...")
+                    logger.info("Searching memory for similar past events...")
                     historical_context = retrieve_similar_logs(
                         client=qdrant,
                         collection_name=collection,
@@ -77,31 +78,28 @@ def consume_raw_logs(topic: str, group_id: str) -> None:
                     )
 
                     if historical_context:
-                        print(f"    [MEMORY] Found {len(historical_context)} similar past event(s).")
+                        logger.info(f"Found {len(historical_context)} similar past event(s).")
                         for past_event in historical_context:
-                            print(f"        -> [{past_event['score']:.2f}] {past_event['event_type']} from {past_event['source_ip']}")
+                            logger.info(f"Context -> [{past_event['score']:.2f}] {past_event['event_type']} from {past_event['source_ip']}")
                     else:
-                        print("    [MEMORY] No similar past events found. This is a novel anomaly.") 
+                        logger.info("No similar past events found. This is a novel anomaly.") 
 
-                    print("    [REASONING] Drafting incident report...")
+                    logger.info("Drafting incident report...")
                     report = generate_incident_report(
                         log=validated_log,
                         triage=triage_result,
                         history=historical_context
                     )
-                    print(f"\n    INCIDENT REPORT: {report.incident_title}")
-                    print(f"    Severity: {report.severity_level}")
-                    print(f"    Summary: {report.executive_summary}")
-                    print(f"    Actions: {', '.join(report.recommended_actions)}\n")
+                    logger.error(f"INCIDENT REPORT: {report.incident_title} | Severity: {report.severity_level} | Summary: {report.executive_summary} | Actions: {', '.join(report.recommended_actions)}")
                 else:
-                    print(f"    [NORMAL] Log cleared. Reason: {triage_result.reason}")
+                    logger.info(f"Log cleared. Reason: {triage_result.reason}")
                 
             except json.JSONDecodeError as decode_error:
-                print(f"[ERROR] Failed to decode JSON string. Error: {decode_error}")
+                logger.error(f"Failed to decode JSON string. Error: {decode_error}")
             except ValueError as validation_error:
-                print(f"[ERROR] Log format validation failed. Error: {validation_error}")
+                logger.error(f"Log format validation failed. Error: {validation_error}")
 
     except KeyboardInterrupt:
-        print("Interrupt signal received. Shutting down consumer gracefully...")
+        logger.info("Interrupt signal received. Shutting down consumer gracefully...")
     finally:
         consumer.close()

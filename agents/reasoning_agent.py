@@ -3,6 +3,9 @@ import ollama
 from typing import List, Dict, Any
 from pydantic import ValidationError
 from schemas.log_events import NetworkLog, TriageDecision, IncidentReport
+from core.logger import get_logger
+
+logger = get_logger("reasoning_agent")
 
 def generate_incident_report(
     log: NetworkLog, 
@@ -59,7 +62,7 @@ def generate_incident_report(
         return IncidentReport(**report_dict)
         
     except (json.JSONDecodeError, ValidationError) as parsing_error:
-        print(f"[WARNING] Reasoning Agent failed to parse response. Error: {parsing_error}")
+        logger.warning(f"Failed to parse response. Error: {parsing_error}")
         return IncidentReport(
             incident_title="Parsing Error",
             severity_level="LOW",
