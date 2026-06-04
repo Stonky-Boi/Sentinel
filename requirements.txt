@@ -1,0 +1,4 @@
+confluent-kafka
+pydantic
+qdrant-client
+ollama
