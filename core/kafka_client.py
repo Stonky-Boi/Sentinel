@@ -30,6 +30,22 @@ def get_kafka_producer() -> Producer:
     }
     return Producer(config)
 
+dlq_producer = get_kafka_producer()
+
+def send_to_dlq(raw_message: str, error_context: str) -> None:
+    """Routes malformed or unprocessable logs to the Dead Letter Queue topic."""
+    try:
+        dlq_payload = json.dumps({
+            "original_message": raw_message,
+            "error_reason": error_context
+        }).encode("utf-8")
+        
+        dlq_producer.produce("logs_dead_letter", value=dlq_payload)
+        dlq_producer.flush()
+        logger.warning(f"Routed malformed message to DLQ. Reason: {error_context}")
+    except Exception as dlq_error:
+        logger.error(f"CRITICAL: Failed to write to DLQ! Error: {dlq_error}")
+
 def process_log_worker(validated_log: NetworkLog) -> None:
     """Background worker function that handles the heavy LLM inference and Qdrant storage."""
     try:
@@ -108,9 +124,11 @@ def consume_raw_logs(topic: str, group_id: str) -> None:
                     executor.submit(process_log_worker, validated_log)
                     
                 except json.JSONDecodeError as decode_error:
-                    logger.error(f"Failed to decode JSON string. Error: {decode_error}")
+                    logger.error(f"Failed to decode JSON string. Routing to DLQ.")
+                    send_to_dlq(raw_message=raw_data, error_context=f"JSON Decode Error: {str(decode_error)}")
                 except ValueError as validation_error:
-                    logger.error(f"Log format validation failed. Error: {validation_error}")
+                    logger.error(f"Log format validation failed. Routing to DLQ.")
+                    send_to_dlq(raw_message=raw_data, error_context=f"Schema Validation Error: {str(validation_error)}")
 
         except KeyboardInterrupt:
             logger.info("Interrupt signal received. Shutting down consumer gracefully...")
