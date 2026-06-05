@@ -4,6 +4,7 @@ from typing import List, Dict, Any
 from pydantic import ValidationError
 from schemas.log_events import NetworkLog, TriageDecision, IncidentReport
 from core.logger import get_logger
+from core.config import Config
 
 logger = get_logger("reasoning_agent")
 
@@ -11,7 +12,7 @@ def generate_incident_report(
     log: NetworkLog, 
     triage: TriageDecision, 
     history: List[Dict[str, Any]], 
-    model_name: str = "qwen2.5-coder"
+    model_name: str = Config["llm"]["reasoning_model"]
 ) -> IncidentReport:
     """
     Synthesizes the live log, triage context, and historical data into an actionable incident report.

@@ -5,19 +5,20 @@ from schemas.log_events import NetworkLog
 from core.qdrant_client import get_qdrant_client, setup_collection, store_log_in_qdrant
 from core.logger import get_logger
 from core.storage import save_report_to_disk
+from core.config import Config
 from agents.triage_agent import analyze_log_for_anomalies
 from agents.retrieval_agent import retrieve_similar_logs
 from agents.reasoning_agent import generate_incident_report
 
 logger = get_logger("kafka_client")
 qdrant = get_qdrant_client()
-collection = "network_logs"
+collection = Config["qdrant"]["collection"]
 setup_collection(client=qdrant, collection_name=collection)
 
 def get_kafka_consumer(group_id: str) -> Consumer:
     """Initializes and returns a Kafka consumer configured for local development."""
     config = {
-        "bootstrap.servers": "localhost:9092",
+        "bootstrap.servers": Config["kafka"]["bootstrap_servers"],
         "group.id": group_id,
         "auto.offset.reset": "earliest",
         "session.timeout.ms": 45000,
@@ -27,7 +28,7 @@ def get_kafka_consumer(group_id: str) -> Consumer:
 def get_kafka_producer() -> Producer:
     """Initializes and returns a Kafka producer for sending structured logs."""
     config = {
-        "bootstrap.servers": "localhost:9092"
+        "bootstrap.servers": Config["kafka"]["bootstrap_servers"]
     }
     return Producer(config)
 
@@ -41,7 +42,7 @@ def send_to_dlq(raw_message: str, error_context: str) -> None:
             "error_reason": error_context
         }).encode("utf-8")
         
-        dlq_producer.produce("logs_dead_letter", value=dlq_payload)
+        dlq_producer.produce(Config["kafka"]["topic_dlq"], value=dlq_payload)
         dlq_producer.flush()
         logger.warning(f"Routed malformed message to DLQ. Reason: {error_context}")
     except Exception as dlq_error:
@@ -64,7 +65,7 @@ def process_log_worker(validated_log: NetworkLog) -> None:
                 client=qdrant,
                 collection_name=collection,
                 anomalous_log=validated_log,
-                limit=2
+                limit=Config["rag"]["retrieval_limit"]
             )
 
             if historical_context:
@@ -100,7 +101,7 @@ def consume_raw_logs(topic: str, group_id: str) -> None:
     logger.info(f"Starting consumer for topic: {topic}. Waiting for logs...")
 
     # We use 4 concurrent background workers. This allows the main thread to keep polling Kafka instantly.
-    with ThreadPoolExecutor(max_workers=4) as executor:
+    with ThreadPoolExecutor(max_workers=Config["kafka"]["max_workers"]) as executor:
         try:
             while True:
                 message = consumer.poll(timeout=1.0)

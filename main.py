@@ -5,8 +5,10 @@ import json
 import signal
 import argparse
 import subprocess
+
 from core.kafka_client import consume_raw_logs
 from core.logger import SENTINEL_HOME
+from core.config import Config
 
 # Rich library imports for beautiful terminal UI
 from rich.console import Console
@@ -96,8 +98,8 @@ def monitor_reports() -> None:
 
 def run_worker() -> None:
     """The actual foreground loop, hidden from the user by the start_daemon command."""
-    target_topic = "logs_raw"
-    consume_raw_logs(topic=target_topic, group_id="sentinel_triage_group")
+    target_topic = Config["kafka"]["topic_raw"]
+    consume_raw_logs(topic=target_topic, group_id=Config["kafka"]["consumer_group"])
 
 def list_reports() -> None:
     """Displays a formatted table of all generated incident reports."""

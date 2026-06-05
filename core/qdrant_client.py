@@ -4,14 +4,15 @@ from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct
 from schemas.log_events import NetworkLog
 from core.logger import get_logger
+from core.config import Config
 
 logger = get_logger("qdrant_client")
 
 def get_qdrant_client() -> QdrantClient:
     """Initializes and returns a connection to the local Qdrant instance."""
-    return QdrantClient(url="http://localhost:6333")
+    return QdrantClient(url=Config["qdrant"]["url"])
 
-def setup_collection(client: QdrantClient, collection_name: str, vector_size: int = 768) -> None:
+def setup_collection(client: QdrantClient, collection_name: str, vector_size: int = Config["qdrant"]["vector_size"]) -> None:
     """Creates a Qdrant collection if it does not already exist."""
     if not client.collection_exists(collection_name=collection_name):
         client.create_collection(
@@ -33,7 +34,7 @@ def embed_log(log: NetworkLog) -> list[float]:
     )
     
     response = ollama.embeddings(
-        model="nomic-embed-text",
+        model=Config["llm"]["embedding_model"],
         prompt=log_text
     )
     
