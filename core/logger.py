@@ -1,25 +1,33 @@
 import logging
-import sys
+from pathlib import Path
+
+# Define the hidden Sentinel home directory on the host machine
+SENTINEL_HOME = Path.home() / ".sentinel"
+LOG_DIR = SENTINEL_HOME / "logs"
+REPORT_DIR = SENTINEL_HOME / "reports"
+
+# Ensure the directory structure exists
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+REPORT_DIR.mkdir(parents=True, exist_ok=True)
 
 def get_logger(name: str) -> logging.Logger:
     """
-    Configures and returns a standard logger for the Sentinel application.
-    Ensures all modules format their output consistently.
+    Returns a standard logger that writes exclusively to a rotating log file.
+    Ensures absolute silence in the standard terminal output for daemonization.
     """
     logger = logging.getLogger(name)
     
-    # Prevent adding multiple handlers if the logger is requested multiple times
     if not logger.handlers:
         logger.setLevel(logging.INFO)
         
-        # Create a clean, production-ready format
         formatter = logging.Formatter(
             fmt="%(asctime)s | %(levelname)-8s | [%(name)s] %(message)s",
             datefmt="%Y-%m-%d %H:%M:%S"
         )
         
-        # Route logs to standard output
-        handler = logging.StreamHandler(sys.stdout)
+        # Route logs to a dedicated system file, NOT stdout
+        log_file = LOG_DIR / "system.log"
+        handler = logging.FileHandler(log_file)
         handler.setFormatter(formatter)
         logger.addHandler(handler)
         

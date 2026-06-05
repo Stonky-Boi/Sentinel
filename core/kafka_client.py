@@ -3,10 +3,11 @@ from concurrent.futures import ThreadPoolExecutor
 from confluent_kafka import Consumer, Producer, KafkaException, KafkaError
 from schemas.log_events import NetworkLog
 from core.qdrant_client import get_qdrant_client, setup_collection, store_log_in_qdrant
+from core.logger import get_logger
+from core.storage import save_report_to_disk
 from agents.triage_agent import analyze_log_for_anomalies
 from agents.retrieval_agent import retrieve_similar_logs
 from agents.reasoning_agent import generate_incident_report
-from core.logger import get_logger
 
 logger = get_logger("kafka_client")
 qdrant = get_qdrant_client()
@@ -79,7 +80,12 @@ def process_log_worker(validated_log: NetworkLog) -> None:
                 triage=triage_result,
                 history=historical_context
             )
-            logger.error(f"[{validated_log.source_ip}] INCIDENT REPORT: {report.incident_title} | Severity: {report.severity_level} | Summary: {report.executive_summary} | Actions: {', '.join(report.recommended_actions)}")
+            report_id = save_report_to_disk(
+                report=report, 
+                source_ip=validated_log.source_ip, 
+                target_ip=validated_log.destination_ip
+            )
+            logger.info(f"[{validated_log.source_ip}] Incident Report generated and saved as {report_id}.")
         else:
             logger.info(f"[{validated_log.source_ip}] Log cleared. Reason: {triage_result.reason}")
             
