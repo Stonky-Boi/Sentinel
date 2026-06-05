@@ -31,6 +31,97 @@ Ensure the following dependencies are installed and running on the host machine:
 * Ollama (running locally with `qwen2.5-coder` and `nomic-embed-text` models pulled)
 * syslog-ng
 
+## Infrastructure Setup
+
+Sentinel requires several underlying services to handle data streaming, vector memory, and AI inference. Follow the instructions below for your respective operating system. It is recommended to run Kafka, Qdrant, and syslog-ng in separate terminal windows or as background services.
+
+### Option A: macOS (via Homebrew)
+
+**1. Apache Kafka**
+Install Kafka, start the server, and create both the primary and Dead Letter Queue (DLQ) topics:
+```bash
+brew install kafka
+kafka-server-start /opt/homebrew/etc/kafka/server.properties
+
+# In a new terminal, create the topics:
+kafka-topics --create --topic logs_raw --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
+kafka-topics --create --topic logs_dead_letter --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
+```
+
+**2. Qdrant (Vector Database)**
+Download the binary, bypass macOS quarantine restrictions, and start the database:
+
+```bash
+curl -LO https://github.com/qdrant/qdrant/releases/download/v1.18.1/qdrant-aarch64-apple-darwin.tar.gz
+tar -xzf qdrant-aarch64-apple-darwin.tar.gz
+xattr -d com.apple.quarantine ./qdrant 
+chmod +x ./qdrant
+./qdrant
+```
+
+**3. Ollama (Local LLM Inference)**
+Install the Ollama engine and pull the required reasoning and embedding models:
+
+```bash
+brew install --cask ollama
+ollama pull qwen2.5-coder
+ollama pull nomic-embed-text
+```
+
+**4. syslog-ng (Log Ingestion)**
+Install the log aggregator and start it using the Sentinel configuration file:
+
+```bash
+brew install syslog-ng
+syslog-ng -F -f /path/to/Sentinel/syslog_kafka.conf
+```
+
+### Option B: Linux (Ubuntu/Debian)
+
+**1. Apache Kafka**
+Download the binaries, start the environment, and create the topics:
+
+```bash
+wget https://downloads.apache.org/kafka/3.7.0/kafka_2.13-3.7.0.tgz
+tar -xzf kafka_2.13-3.7.0.tgz
+cd kafka_2.13-3.7.0
+
+# Start Zookeeper and Kafka (run in separate terminals or use systemd)
+bin/zookeeper-server-start.sh config/zookeeper.properties
+bin/kafka-server-start.sh config/server.properties
+
+# In a new terminal, create the topics:
+bin/kafka-topics.sh --create --topic logs_raw --bootstrap-server localhost:9092
+bin/kafka-topics.sh --create --topic logs_dead_letter --bootstrap-server localhost:9092
+```
+
+**2. Qdrant (Vector Database)**
+The officially supported method for running Qdrant on Linux is via Docker:
+
+```bash
+# Ensure Docker is installed, then run:
+docker pull qdrant/qdrant
+docker run -p 6333:6333 -p 6334:6334 -v $(pwd)/qdrant_storage:/qdrant/storage:z qdrant/qdrant
+```
+
+**3. Ollama (Local LLM Inference)**
+Install Ollama via the official install script and pull the models:
+
+```bash
+curl -fsSL https://ollama.com/install.sh | sh
+ollama pull qwen2.5-coder
+ollama pull nomic-embed-text
+```
+
+**4. syslog-ng (Log Ingestion)**
+Install via the package manager and start it using the Sentinel configuration file:
+
+```bash
+sudo apt update
+sudo apt install syslog-ng
+sudo syslog-ng -F -f /path/to/Sentinel/syslog_kafka.conf
+```
+
 ## Installation
 
 Sentinel includes an automated installation script that generates an isolated Python environment, creates the required background directories, and registers a global executable wrapper.
